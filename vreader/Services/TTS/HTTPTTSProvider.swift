@@ -1,4 +1,4 @@
-// Purpose: HTTP-based TTS provider for cloud voice synthesis (Azure, custom APIs).
+// Purpose: HTTP-based TTS provider for cloud voice synthesis (Google Cloud, Azure, custom APIs).
 // Sends text to a REST endpoint, receives audio data, and supports chunked synthesis,
 // disk caching, and position tracking.
 //
@@ -81,14 +81,29 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
             throw TTSProviderError.httpError(httpResponse.statusCode)
         }
 
-        guard !data.isEmpty else {
+        let audioData: Data
+        if case .googleCloud = config.provider {
+            guard let payload = try? JSONDecoder().decode(GoogleSynthesisResponse.self, from: data),
+                  let decoded = Data(base64Encoded: payload.audioContent),
+                  !decoded.isEmpty else {
+                throw TTSProviderError.emptyResponse
+            }
+            audioData = decoded
+        } else {
+            guard !data.isEmpty else {
+                throw TTSProviderError.emptyResponse
+            }
+            audioData = data
+        }
+
+        guard !audioData.isEmpty else {
             throw TTSProviderError.emptyResponse
         }
 
         // Save to cache
-        saveToCache(text: text, voice: voice, data: data)
+        saveToCache(text: text, voice: voice, data: audioData)
 
-        return data
+        return audioData
     }
 
     func synthesizeChunked(
@@ -194,6 +209,11 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
         request.httpMethod = "POST"
 
         switch config.provider {
+        case .googleCloud(let languageCode):
+            request = buildGoogleRequest(
+                request: request, text: text, voice: voice,
+                languageCode: languageCode
+            )
         case .azure(let region):
             request = buildAzureRequest(request: request, text: text, voice: voice, region: region)
         case .custom(let headers, let bodyTemplate):
@@ -232,6 +252,34 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
         return req
     }
 
+    private func buildGoogleRequest(
+        request: URLRequest,
+        text: String,
+        voice: String,
+        languageCode: String
+    ) -> URLRequest {
+        var req = request
+        guard var components = URLComponents(url: req.url!, resolvingAgainstBaseURL: false) else {
+            return req
+        }
+        var query = components.queryItems ?? []
+        query.append(URLQueryItem(name: "key", value: config.apiKey))
+        components.queryItems = query
+        req.url = components.url
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "input": ["text": text],
+            "voice": ["languageCode": languageCode, "name": voice],
+            "audioConfig": [
+                "audioEncoding": "MP3",
+                "speakingRate": config.speakingRate,
+            ],
+        ]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return req
+    }
+
     private func buildCustomRequest(
         request: URLRequest,
         text: String,
@@ -259,7 +307,7 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
     // MARK: - Disk Cache
 
     private func cacheKey(text: String, voice: String) -> String {
-        let input = "\(text)|\(voice)"
+        let input = "\(String(describing: config.provider))|\(config.speakingRate)|\(text)|\(voice)"
         let digest = SHA256.hash(data: Data(input.utf8))
         return digest.prefix(16).map { String(format: "%02x", $0) }.joined()
     }
@@ -278,4 +326,8 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? data.write(to: filePath, options: .atomic)
     }
+}
+
+private struct GoogleSynthesisResponse: Decodable {
+    let audioContent: String
 }

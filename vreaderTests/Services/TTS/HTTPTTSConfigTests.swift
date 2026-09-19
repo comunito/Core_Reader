@@ -8,6 +8,27 @@ import Foundation
 @Suite("HTTPTTSConfig Validation")
 struct HTTPTTSConfigValidationTests {
 
+    @Test func configValidation_googleDefaultsAreValid() {
+        let config = HTTPTTSConfig(
+            endpoint: "https://texttospeech.googleapis.com/v1/text:synthesize",
+            apiKey: "test-key",
+            voice: "es-US-Wavenet-B",
+            provider: .googleCloud(languageCode: "es-US")
+        )
+        #expect(config.validate() == .valid)
+        #expect(config.speakingRate == 1.0)
+    }
+
+    @Test func configValidation_rejectsOutOfRangeSpeakingRate() {
+        let config = HTTPTTSConfig(
+            endpoint: "https://api.example.com/tts",
+            apiKey: "test-key",
+            voice: "voice",
+            speakingRate: 5.0
+        )
+        #expect(config.validate() == .invalid(.invalidSpeakingRate))
+    }
+
     @Test func configValidation_rejectsEmptyURL() {
         let config = HTTPTTSConfig(
             endpoint: "", apiKey: "test-key", voice: "en-US-JennyNeural"

@@ -5,7 +5,7 @@
 // - Stores config via @AppStorage for persistence.
 // - API key stored in Keychain via KeychainService for security.
 // - Test connection button validates config before saving.
-// - Provider picker: Azure or Custom endpoint.
+// - Provider picker: Google Cloud, Azure, or Custom endpoint.
 //
 // @coordinates-with: HTTPTTSConfig.swift, HTTPTTSProvider.swift
 
@@ -14,10 +14,12 @@ import SwiftUI
 /// Settings view for HTTP TTS provider configuration.
 struct HTTPTTSSettingsView: View {
 
-    @State private var endpoint: String = ""
+    @State private var endpoint: String = "https://texttospeech.googleapis.com/v1/text:synthesize"
     @State private var apiKey: String = ""
-    @State private var voice: String = "en-US-JennyNeural"
-    @State private var providerType: ProviderSelection = .azure
+    @State private var voice: String = "es-US-Wavenet-B"
+    @State private var providerType: ProviderSelection = .googleCloud
+    @State private var languageCode: String = "es-US"
+    @State private var speakingRate: Double = 1.0
     @State private var azureRegion: String = "eastus"
     @State private var customHeaders: String = ""
     @State private var customBodyTemplate: String = ""
@@ -29,6 +31,7 @@ struct HTTPTTSSettingsView: View {
     private static let configKey = "httpTTSConfig"
 
     enum ProviderSelection: String, CaseIterable {
+        case googleCloud = "Google Cloud"
         case azure = "Azure"
         case custom = "Custom"
     }
@@ -54,6 +57,24 @@ struct HTTPTTSSettingsView: View {
                 TextField("Voice ID", text: $voice)
                     .autocapitalization(.none)
                     .accessibilityIdentifier("httpTTSVoice")
+
+                HStack {
+                    Text("Speed")
+                    Slider(value: $speakingRate, in: 0.25...4.0, step: 0.05)
+                    Text(String(format: "%.2gx", speakingRate))
+                        .monospacedDigit()
+                }
+            }
+
+            if providerType == .googleCloud {
+                Section("Google Cloud") {
+                    TextField("Language code", text: $languageCode)
+                        .autocapitalization(.none)
+                        .accessibilityIdentifier("googleTTSLanguageCode")
+                    Text("The API key is stored only in Keychain.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             if providerType == .azure {
@@ -105,6 +126,8 @@ struct HTTPTTSSettingsView: View {
     private func buildConfig() -> HTTPTTSConfig {
         let provider: TTSProviderType
         switch providerType {
+        case .googleCloud:
+            provider = .googleCloud(languageCode: languageCode)
         case .azure:
             provider = .azure(region: azureRegion)
         case .custom:
@@ -116,7 +139,8 @@ struct HTTPTTSSettingsView: View {
             endpoint: endpoint,
             apiKey: apiKey,
             voice: voice,
-            provider: provider
+            provider: provider,
+            speakingRate: speakingRate
         )
     }
 
@@ -153,8 +177,12 @@ struct HTTPTTSSettingsView: View {
            let config = try? JSONDecoder().decode(HTTPTTSConfig.self, from: data) {
             endpoint = config.endpoint
             voice = config.voice
+            speakingRate = config.speakingRate
 
             switch config.provider {
+            case .googleCloud(let code):
+                providerType = .googleCloud
+                languageCode = code
             case .azure(let region):
                 providerType = .azure
                 azureRegion = region
@@ -194,6 +222,8 @@ struct HTTPTTSSettingsView: View {
             return "Voice ID is required."
         case .invalidEndpointURL:
             return "API endpoint is not a valid URL."
+        case .invalidSpeakingRate:
+            return "Speed must be between 0.25x and 4x."
         }
     }
 }

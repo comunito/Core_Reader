@@ -17,6 +17,36 @@ import Foundation
 struct HTTPTTSProviderSynthesisTests {
 
     @Test
+    func googleCloud_decodesBase64AudioAndBuildsRequest() async throws {
+        let audioData = Data("google-mp3".utf8)
+        let response = try JSONSerialization.data(withJSONObject: [
+            "audioContent": audioData.base64EncodedString()
+        ])
+        let session = MockURLSession(responseData: response, statusCode: 200)
+        let config = HTTPTTSConfig(
+            endpoint: "https://texttospeech.googleapis.com/v1/text:synthesize",
+            apiKey: "google-key",
+            voice: "es-US-Wavenet-B",
+            provider: .googleCloud(languageCode: "es-US"),
+            speakingRate: 1.25
+        )
+        let provider = HTTPTTSProvider(config: config, urlSession: session)
+
+        let result = try await provider.synthesize(text: "Hola", voice: "es-US-Wavenet-B")
+
+        #expect(result == audioData)
+        #expect(session.lastRequest?.url?.query?.contains("key=google-key") == true)
+        #expect(session.lastRequest?.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        let body = try #require(session.lastRequest?.httpBody)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let voice = try #require(json["voice"] as? [String: String])
+        #expect(voice["languageCode"] == "es-US")
+        #expect(voice["name"] == "es-US-Wavenet-B")
+        let audioConfig = try #require(json["audioConfig"] as? [String: Any])
+        #expect(audioConfig["speakingRate"] as? Double == 1.25)
+    }
+
+    @Test
     func synthesize_returnsAudioData() async throws {
         let audioData = Data("fake-audio-bytes".utf8)
         let session = MockURLSession(responseData: audioData, statusCode: 200)

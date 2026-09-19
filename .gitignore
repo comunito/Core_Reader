@@ -51,6 +51,20 @@ docs/.id-counters/
 
 # Secrets — local API keys, never commit
 .secrets/
+.env
+.env.*
+!.env.example
+*.token
+*.pem
+*.p12
+*.pfx
+*.mobileprovision
+*.cer
+*.crt
+*credentials*.json
+*.apikey
+*.credentials.json
+google-cloud-credentials*.json
 
 # >>> cc-suite >>>
 # AI assistant local state
