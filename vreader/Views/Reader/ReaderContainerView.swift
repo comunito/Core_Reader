@@ -924,7 +924,8 @@ struct ReaderContainerView: View {
             // from being matched against an incoming probe (Codex audit
             // 2026-05-06). Compare on the typed enum, not raw string, so
             // case/aliasing drift can't silently disable the wiring.
-            if resolvedFingerprintFormat == .epub {
+            switch resolvedFingerprintFormat {
+            case .epub:
                 let key = book.fingerprintKey
                 let token = readerToken
                 // Feature #42 WI-5: when the Readium engine is active, route
@@ -972,7 +973,7 @@ struct ReaderContainerView: View {
                         for: key, token: token, timeout: timeout
                     )
                 }
-            } else if resolvedFingerprintFormat == .azw3 {
+            case .azw3:
                 // BookFormat.azw3 covers all Foliate-rendered formats
                 // (azw3/azw/mobi/prc per FormatCapabilities); the
                 // FoliateViewBridge is the single host for all of them.
@@ -1007,6 +1008,8 @@ struct ReaderContainerView: View {
                         for: key, token: token, timeout: timeout
                     )
                 }
+            default:
+                break
             }
             // TXT/MD/PDF intentionally leave `settleStrategy` nil — the
             // 100ms `Task.sleep` fallback in `DebugReaderProbeAdapter`
@@ -1021,7 +1024,13 @@ struct ReaderContainerView: View {
             let service = ttsService
             probe.ttsProbe = { @MainActor in
                 let state = service.state
-                let offset: Int? = (state == .idle) ? nil : service.currentOffsetUTF16
+                let offset: Int?
+                switch state {
+                case .idle:
+                    offset = nil
+                default:
+                    offset = service.currentOffsetUTF16
+                }
                 return (state: state.publicName, offsetUTF16: offset)
             }
             debugProbe = probe
@@ -1362,5 +1371,3 @@ private struct ReaderAskAIReadObserver: ViewModifier {
             }
     }
 }
-
-

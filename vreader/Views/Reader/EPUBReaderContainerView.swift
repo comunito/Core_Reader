@@ -427,13 +427,12 @@ struct EPUBReaderContainerView: View {
                 color: resolveHighlightColor(from: note)
             )
         }
-        .onReceive(NotificationCenter.default.publisher(for: .readerAnnotationRequested)) { note in
-            let token = note.userInfo?["selectionRequestToken"] as? UUID
-            guard let event = selectionTokenCache.resolve(token: token) else { return }
-            pendingSelectionEvent = event
-            noteText = ""
-            showNoteSheet = true
-        }
+        .modifier(EPUBAnnotationInputObserver(
+            pendingSelectionEvent: $pendingSelectionEvent,
+            noteText: $noteText,
+            showNoteSheet: $showNoteSheet,
+            selectionTokenCache: $selectionTokenCache
+        ))
         .sheet(isPresented: $showNoteSheet) {
             noteInputSheet
         }
@@ -936,6 +935,26 @@ struct EPUBReaderContainerView: View {
             .accessibilityIdentifier("epubReaderContent")
         }
     }
+}
 
+/// Keeps the annotation request observer out of the main EPUB view expression.
+/// Xcode 27 otherwise exceeds SwiftUI's type-checking budget for `body`.
+private struct EPUBAnnotationInputObserver: ViewModifier {
+    @Binding var pendingSelectionEvent: ReaderSelectionEvent?
+    @Binding var noteText: String
+    @Binding var showNoteSheet: Bool
+    @Binding var selectionTokenCache: EPUBSelectionTokenCache
+
+    func body(content: Content) -> some View {
+        content.onReceive(
+            NotificationCenter.default.publisher(for: .readerAnnotationRequested)
+        ) { note in
+            let token = note.userInfo?["selectionRequestToken"] as? UUID
+            guard let event = selectionTokenCache.resolve(token: token) else { return }
+            pendingSelectionEvent = event
+            noteText = ""
+            showNoteSheet = true
+        }
+    }
 }
 #endif

@@ -220,7 +220,7 @@ struct CanonicalProgressBoundaryTests {
         let backing = ProgressBackingMock()
         let store = ReadingProgressStore(persistence: backing, deviceID: "device")
         let locator = makeLocator(offset: 12)
-        await store.updateFromTTS(bookID: testFP.canonicalKey, locator: locator)
+        try await store.updateFromTTS(bookID: testFP.canonicalKey, locator: locator)
         let envelope = VReaderLocator(legacyLocator: locator)
         try await store.updateFromReadium(
             bookID: testFP.canonicalKey, envelope: envelope, fallback: locator
@@ -230,7 +230,7 @@ struct CanonicalProgressBoundaryTests {
         #expect(loaded?.locatorJSON.isEmpty == false)
     }
 
-    @Test
+    @Test @MainActor
     func lastWriteWinsUsesUpdatedAtAndIncomingTie() {
         let old = ReadingProgressRecord(
             bookID: "book", locatorJSON: "old", href: "a.xhtml", progression: 0.1,
