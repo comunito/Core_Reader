@@ -75,3 +75,18 @@ adaptadores existentes para evitar duplicar el pipeline de audio y posición.
 - El audio continúa con la app en background mediante la sesión existente.
 - No hay CloudKit, Android, web ni API keys en git/UserDefaults.
 - Tests unitarios verdes y build instalable verificado en Xcode/simulador.
+
+## Preparación sin Xcode
+
+- `ReadingProgressStore` es la fachada única para cargar/guardar progreso y
+  resolver un registro más reciente por `updatedAt`.
+- `ReadingProgressRecord` deja el progreso en una forma Codable transportable a
+  CloudKit sin activar entitlements ni llamadas de red.
+- `TextChunk`, `AudioCacheKey`, `AudioCache` y `AudioPlaybackService` separan
+  segmentación, identidad de caché, filesystem y reproducción.
+- La identidad de libro existente (`DocumentFingerprint`) ya usa SHA-256 de los
+  bytes y tamaño; se conserva como `bookID` estable.
+- Se añadió un fixture EPUB sintético generado desde strings (`MigrationFixtures`)
+  con dos capítulos, diálogos, acentos, `ñ`, `¿?` y `¡!`, sin contenido con copyright.
+- El detalle de sincronización futura está en `docs/cloudkit-sync-design.md` y
+  el límite de producto en `docs/vreader-scope.md`.

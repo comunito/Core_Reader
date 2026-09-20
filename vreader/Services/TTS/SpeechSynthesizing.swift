@@ -9,6 +9,59 @@
 // @coordinates-with: TTSService.swift
 
 import AVFoundation
+import Foundation
+
+/// Format-neutral state exposed to future background/lock-screen controls.
+enum AudioPlaybackState: Equatable, Sendable {
+    case idle
+    case playing
+    case paused
+}
+
+/// Owns chunk playback independently from the speech provider and UI.
+@MainActor
+final class AudioPlaybackService {
+    private let player: HTTPTTSChunkPlayer
+    private(set) var state: AudioPlaybackState = .idle
+    private(set) var currentChunk: Int?
+
+    init(player: HTTPTTSChunkPlayer = HTTPTTSChunkPlayer()) {
+        self.player = player
+        player.onChunkStarted = { [weak self] index in
+            self?.currentChunk = index
+            self?.state = .playing
+        }
+        player.onFinished = { [weak self] in
+            self?.currentChunk = nil
+            self?.state = .idle
+        }
+        player.onError = { [weak self] _ in
+            self?.currentChunk = nil
+            self?.state = .idle
+        }
+    }
+
+    func play(_ chunks: [Data]) {
+        player.play(chunks: chunks)
+        state = chunks.isEmpty ? .idle : .playing
+    }
+
+    func pause() {
+        player.pause()
+        if player.isPaused { state = .paused }
+    }
+
+    func resume() {
+        player.resume()
+        if player.isPlaying { state = .playing }
+    }
+
+    func stop() {
+        player.stop()
+        currentChunk = nil
+        state = .idle
+    }
+}
 
 /// Protocol for utterance configuration, abstracting AVSpeechUtterance.
 protocol SpeechUtteranceProtocol {

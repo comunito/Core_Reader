@@ -67,6 +67,39 @@ struct DocumentFingerprintTests {
         #expect(a != b)
     }
 
+    @Test func sameFileBytesProduceSameBookID() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("book-id-(UUID().uuidString).epub")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("same EPUB bytes".utf8).write(to: url)
+        let first = try await ContentHasher.hash(fileAt: url)
+        let second = try await ContentHasher.hash(fileAt: url)
+        #expect(first.sha256Hex == second.sha256Hex)
+        #expect(first.byteCount == second.byteCount)
+    }
+
+    @Test func modifiedFileBytesProduceDifferentBookID() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("book-id-modified-(UUID().uuidString).epub")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("original EPUB bytes".utf8).write(to: url)
+        let original = try await ContentHasher.hash(fileAt: url)
+        try Data("modified EPUB bytes".utf8).write(to: url)
+        let modified = try await ContentHasher.hash(fileAt: url)
+        #expect(original.sha256Hex != modified.sha256Hex)
+    }
+
+    @Test func generatedEPUBFixture_hasMultipleChaptersAndStableHash() async throws {
+        let url = try MigrationFixtures.makeReadingPositionEPUB()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let first = try await ContentHasher.hash(fileAt: url)
+        let second = try await ContentHasher.hash(fileAt: url)
+        let entries = try ZIPWriter.listEntryNames(in: Data(contentsOf: url))
+        #expect(first == second)
+        #expect(first.byteCount > 0)
+        #expect(entries.filter { $0.hasSuffix(".xhtml") && $0.contains("chapter") }.count == 2)
+    }
+
     @Test func usableAsSetElement() {
         let fp = DocumentFingerprint(contentSHA256: Self.sampleSHA, fileByteCount: 100, format: .epub)
         var set: Set<DocumentFingerprint> = []

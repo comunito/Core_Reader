@@ -12,6 +12,39 @@ import Foundation
 /// Factory for creating test fixture data for migration testing.
 enum MigrationFixtures {
 
+    /// Builds a tiny copyright-free EPUB in a temp directory for locator,
+    /// extraction, hashing, and chunking tests. It is deliberately generated
+    /// from source strings so the fixture remains reviewable in git.
+    static func makeReadingPositionEPUB() throws -> URL {
+        let container = """
+        <?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>
+        """
+        let opf = """
+        <?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">core-reader-fixture</dc:identifier><dc:title>Core Reader Fixture</dc:title><dc:language>es</dc:language></metadata><manifest><item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>
+        """
+        let chapter1 = """
+        <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Primero</title></head><body><h1>Capítulo uno</h1><p>Hola, ¿qué tal? Esta prueba contiene acentos, ñ y signos ¡importantes!</p><p>Diálogo: —Sí, gracias —respondió Ana.</p></body></html>
+        """
+        let chapter2 = """
+        <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Segundo</title></head><body><h1>Capítulo dos</h1><p>Segundo capítulo para comprobar navegación y progreso.</p></body></html>
+        """
+        let nav = """
+        <html xmlns="http://www.w3.org/1999/xhtml"><body><nav epub:type="toc" xmlns:epub="http://www.idpf.org/2007/ops"><ol><li><a href="chapter1.xhtml">Uno</a></li><li><a href="chapter2.xhtml">Dos</a></li></ol></nav></body></html>
+        """
+        let entries = [
+            ZIPWriter.Entry(name: "mimetype", data: Data("application/epub+zip".utf8)),
+            ZIPWriter.Entry(name: "META-INF/container.xml", data: Data(container.utf8)),
+            ZIPWriter.Entry(name: "OEBPS/content.opf", data: Data(opf.utf8)),
+            ZIPWriter.Entry(name: "OEBPS/nav.xhtml", data: Data(nav.utf8)),
+            ZIPWriter.Entry(name: "OEBPS/chapter1.xhtml", data: Data(chapter1.utf8)),
+            ZIPWriter.Entry(name: "OEBPS/chapter2.xhtml", data: Data(chapter2.utf8)),
+        ]
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("core-reader-fixture-\(UUID().uuidString).epub")
+        try ZIPWriter.createArchive(entries: entries).write(to: url, options: .atomic)
+        return url
+    }
+
     // MARK: - DocumentFingerprint Fixtures
 
     static func sampleEpubFingerprint() -> DocumentFingerprint {

@@ -13,7 +13,6 @@
 // @coordinates-with: TTSProviderProtocol.swift, HTTPTTSConfig.swift, TTSService.swift
 
 import Foundation
-import CryptoKit
 
 // MARK: - HTTPTTSProvider
 
@@ -26,6 +25,7 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
     private let config: HTTPTTSConfig
     private let urlSession: URLSessionProtocol
     private let cacheDirectory: URL?
+    private let bookID: String?
     private var _isCancelled = false
     private let lock = NSLock()
 
@@ -46,11 +46,13 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
     init(
         config: HTTPTTSConfig,
         urlSession: URLSessionProtocol = URLSession.shared,
-        cacheDirectory: URL? = nil
+        cacheDirectory: URL? = nil,
+        bookID: String? = nil
     ) {
         self.config = config
         self.urlSession = urlSession
         self.cacheDirectory = cacheDirectory
+        self.bookID = bookID
     }
 
     // MARK: - TTSProvider
@@ -307,9 +309,20 @@ final class HTTPTTSProvider: TTSProvider, @unchecked Sendable {
     // MARK: - Disk Cache
 
     private func cacheKey(text: String, voice: String) -> String {
-        let input = "\(String(describing: config.provider))|\(config.speakingRate)|\(text)|\(voice)"
-        let digest = SHA256.hash(data: Data(input.utf8))
-        return digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+        let language: String
+        switch config.provider {
+        case .googleCloud(let languageCode): language = languageCode
+        case .azure(let region): language = region
+        case .custom: language = "custom"
+        }
+        return String(AudioCacheKey(
+            bookID: bookID ?? "unscoped",
+            locatorOrText: text,
+            provider: String(describing: config.provider),
+            voice: voice,
+            language: language,
+            speed: config.speakingRate
+        ).digest.prefix(32))
     }
 
     private func loadFromCache(text: String, voice: String) -> Data? {

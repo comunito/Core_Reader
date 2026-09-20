@@ -58,8 +58,7 @@ final class ReadiumEPUBReaderViewModel {
     // MARK: - Position persistence (WI-6)
 
     private let fingerprint: DocumentFingerprint
-    private let persistence: (any VReaderLocatorPersisting)?
-    private let deviceId: String
+    private let progressStore: ReadingProgressStore?
     private let positionSaveDebounceNs: UInt64
 
     /// Debounced save task — coalesces rapid `locationDidChange` calls so only
@@ -77,8 +76,7 @@ final class ReadiumEPUBReaderViewModel {
     init(fileURL: URL) {
         self.fileURL = fileURL
         self.fingerprint = ReadiumEPUBReaderViewModel.fingerprintPlaceholder
-        self.persistence = nil
-        self.deviceId = ""
+        self.progressStore = nil
         self.positionSaveDebounceNs = 2_000_000_000
         self.lifecycle = nil
     }
@@ -89,15 +87,14 @@ final class ReadiumEPUBReaderViewModel {
     init(
         fileURL: URL,
         fingerprint: DocumentFingerprint,
-        persistence: any VReaderLocatorPersisting,
+        persistence: any ReadingProgressPersisting,
         deviceId: String,
         positionSaveDebounceNs: UInt64 = 2_000_000_000,
         sessionLifecycle: ReaderLifecycleHelper? = nil
     ) {
         self.fileURL = fileURL
         self.fingerprint = fingerprint
-        self.persistence = persistence
-        self.deviceId = deviceId
+        self.progressStore = ReadingProgressStore(persistence: persistence, deviceID: deviceId)
         self.positionSaveDebounceNs = positionSaveDebounceNs
         self.lifecycle = sessionLifecycle
     }
@@ -301,7 +298,7 @@ final class ReadiumEPUBReaderViewModel {
     /// persists after `positionSaveDebounceNs`. Inert when persistence is nil
     /// (render-only WI-5 init) or the VM is closed.
     func save(readiumLocator: ReadiumShared.Locator) {
-        guard persistence != nil, !isClosed else { return }
+        guard progressStore != nil, !isClosed else { return }
         pendingReadiumLocator = readiumLocator
         // Bug #345: tick the session clock on every relocate so the chrome's
         // session-time label advances with reading (position saving stays on
@@ -326,10 +323,8 @@ final class ReadiumEPUBReaderViewModel {
     /// is nothing to restore (no persistence, no saved envelope, non-Readium
     /// envelope, or a decode failure).
     func restoredReadiumLocator() async -> ReadiumShared.Locator? {
-        guard let persistence else { return nil }
-        let envelope = try? await persistence.loadVReaderLocator(
-            bookFingerprintKey: fingerprint.canonicalKey
-        )
+        guard let progressStore else { return nil }
+        let envelope = try? await progressStore.loadReadiumEnvelope(bookID: fingerprint.canonicalKey)
         guard let envelope else { return nil }
         return ReadiumEPUBReaderViewModel.readiumLocator(from: envelope)
     }
@@ -338,7 +333,7 @@ final class ReadiumEPUBReaderViewModel {
     /// legacy `Locator` and saves both in one transaction. Persistence errors
     /// are non-fatal (logged) — a failed position save degrades gracefully.
     private func persist(_ readiumLocator: ReadiumShared.Locator) async {
-        guard let persistence else { return }
+        guard let progressStore else { return }
         guard let envelope = ReadiumEPUBReaderViewModel.makeVReaderLocator(
             from: readiumLocator,
             fingerprintKey: fingerprint.canonicalKey,
@@ -349,11 +344,10 @@ final class ReadiumEPUBReaderViewModel {
             return
         }
         do {
-            try await persistence.saveVReaderLocator(
-                bookFingerprintKey: fingerprint.canonicalKey,
-                vreaderLocator: envelope,
-                legacyLocator: legacy,
-                deviceId: deviceId
+            try await progressStore.updateFromReadium(
+                bookID: fingerprint.canonicalKey,
+                envelope: envelope,
+                fallback: legacy
             )
         } catch {
             log.error(

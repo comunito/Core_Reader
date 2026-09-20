@@ -181,3 +181,16 @@ extension PersistenceActor: ReadingPositionPersisting {
 /// declares the conformance so `ReadiumEPUBReaderViewModel` can take a narrow
 /// `any VReaderLocatorPersisting` (no silent-drop default — Gate-4 round-1 Med).
 extension PersistenceActor: VReaderLocatorPersisting {}
+
+extension PersistenceActor {
+    /// Reads the timestamp belonging to the same local progress row exposed by
+    /// `ReadingProgressStore`, keeping conflict resolution tied to SwiftData's
+    /// persisted value rather than a load-time clock.
+    func loadProgressUpdatedAt(bookID: String) async throws -> Date? {
+        let context = ModelContext(modelContainer)
+        let predicate = #Predicate<Book> { $0.fingerprintKey == bookID }
+        var descriptor = FetchDescriptor<Book>(predicate: predicate)
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first?.readingPosition?.updatedAt
+    }
+}
